@@ -43,17 +43,51 @@ def convert_to_bullets(text):
 # Summarization
 # -----------------------------
 def summarize_text(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=1024)
+
+    prompt = f"""
+Analyze the following content and generate EXACTLY 4 insights.
+
+Format STRICTLY like this:
+
+Insight 1: <Short Title>
+- <Detailed explanation>
+
+Insight 2: <Short Title>
+- <Detailed explanation>
+
+Insight 3: <Short Title>
+- <Detailed explanation>
+
+Insight 4: <Short Title>
+- <Detailed explanation>
+
+Rules:
+- No repetition
+- Each insight must be meaningful
+- Use professional tone
+- Avoid generic sentences
+
+Content:
+{text}
+"""
+
+    inputs = tokenizer(
+        prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=1024
+    )
 
     outputs = model.generate(
         **inputs,
-        max_new_tokens=150,
+        max_new_tokens=300,
+        temperature=0.7,
         num_beams=4
     )
 
-    summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    result = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    return convert_to_bullets(summary)
+    return convert_to_bullets(result)
 
 # -----------------------------
 # UI
