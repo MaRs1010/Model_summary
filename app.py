@@ -44,35 +44,9 @@ def convert_to_bullets(text):
 # -----------------------------
 def summarize_text(text):
 
-    prompt = f"""
-Analyze the following content and generate EXACTLY 4 insights.
-
-Format STRICTLY like this:
-
-Insight 1: <Short Title>
-- <Detailed explanation>
-
-Insight 2: <Short Title>
-- <Detailed explanation>
-
-Insight 3: <Short Title>
-- <Detailed explanation>
-
-Insight 4: <Short Title>
-- <Detailed explanation>
-
-Rules:
-- No repetition
-- Each insight must be meaningful
-- Use professional tone
-- Avoid generic sentences
-
-Content:
-{text}
-"""
-
+    # Step 1: Clean summary (NO instructions inside)
     inputs = tokenizer(
-        prompt,
+        text,
         return_tensors="pt",
         truncation=True,
         max_length=1024
@@ -80,15 +54,26 @@ Content:
 
     outputs = model.generate(
         **inputs,
-        max_new_tokens=300,
-        temperature=0.7,
+        max_new_tokens=180,
         num_beams=4
     )
 
-    result = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    return convert_to_bullets(result)
+    # Step 2: Convert into structured insights
+    import re
+    sentences = re.split(r'(?<=[.!?]) +', summary)
 
+    insights = []
+    for i, s in enumerate(sentences):
+        s = s.strip()
+        if len(s) > 25:
+            title = s.split(" ")[0:4]  # first few words as title
+            title = " ".join(title)
+
+            insights.append(f"### 💡 Insight {i+1}: {title}\n- {s}")
+
+    return "\n\n".join(insights[:4])
 # -----------------------------
 # UI
 # -----------------------------
@@ -137,5 +122,4 @@ with tab2:
                 result = summarize_text(extracted_text)
 
             st.subheader("📌 Summary")
-            for line in result.split("\n"):
-                st.write(line)
+            st.markdown(result)
