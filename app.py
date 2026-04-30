@@ -4,15 +4,15 @@ from PIL import Image
 import pytesseract
 import re
 
-# Fix for Streamlit Cloud OCR
+# Fix OCR path (for deployment environments)
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
 # -----------------------------
-# Load Model (FLAN-T5)
+# Load model (auto-downloads)
 # -----------------------------
 @st.cache_resource
 def load_model():
-    model_name = "google/flan-t5-base"
+    model_name = "facebook/bart-large-cnn"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
     return tokenizer, model
@@ -20,154 +20,104 @@ def load_model():
 tokenizer, model = load_model()
 
 # -----------------------------
-# OCR
+# OCR function
 # -----------------------------
 def extract_text_from_image(image):
     return pytesseract.image_to_string(image)
 
 # -----------------------------
-# Clean OCR Text
+# Convert summary → 4 bullets
 # -----------------------------
-def clean_ocr_text(text):
-    text = re.sub(r'[^A-Za-z0-9$%., ]+', ' ', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+def convert_to_bullets(text):
+    sentences = re.split(r'(?<=[.!?]) +', text)
 
-# -----------------------------
-# Extract Data
-# -----------------------------
-def extract_data(text):
-    numbers = re.findall(r'\$?\d+(?:\.\d+)?%?', text)
+    bullets = []
+    for s in sentences:
+        s = s.strip()
+        if len(s) > 20:
+            bullets.append("• " + s)
 
-    return {
-        "numbers": numbers
-    }
+    return "\n".join(bullets[:4])
 
 # -----------------------------
-# Build Prompt
+# Summarization
 # -----------------------------
-def build_prompt(text, extracted):
+def summarize_text(text):
 
-    return f"""
-You are a financial analyst.
-
-Generate EXACTLY 4 meaningful business insights.
-
-Each insight should:
-- Have a short title
-- Provide a clear explanation
-- Use numbers if available: {extracted['numbers']}
-- Avoid repetition
-
-Format:
-
-Insight 1: Title
-- Explanation
-
-Insight 2: Title
-- Explanation
-
-Insight 3: Title
-- Explanation
-
-Insight 4: Title
-- Explanation
-
-Data:
-{text}
-"""
-
-# -----------------------------
-# Generate Insights
-# -----------------------------
-def generate_insights(prompt):
-
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
+    # Step 1: Clean summary (NO instructions inside)
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        max_length=1024
+    )
 
     outputs = model.generate(
         **inputs,
-        max_new_tokens=300,
-        temperature=0.7
+        max_new_tokens=180,
+        num_beams=4
     )
 
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+    summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-# -----------------------------
-# Clean Output
-# -----------------------------
-def clean_output(text):
+    # Step 2: Convert into structured insights
+    import re
+    sentences = re.split(r'(?<=[.!?]) +', summary)
 
-    insights = re.findall(r'Insight \d+:.*?(?=Insight \d+:|$)', text, re.S)
+    insights = []
+    for i, s in enumerate(sentences):
+        s = s.strip()
+        if len(s) > 25:
+            title = s.split(" ")[0:4]  # first few words as title
+            title = " ".join(title)
 
-    cleaned = []
-    seen = set()
+            insights.append(f"{s}")
 
-    for ins in insights:
-        ins = ins.strip()
-
-        if ins and ins not in seen:
-            cleaned.append(ins)
-            seen.add(ins)
-
-    return "\n\n".join(cleaned[:4])
-
-# -----------------------------
-# Main Pipeline
-# -----------------------------
-def get_insights(text):
-
-    text = clean_ocr_text(text)
-
-    extracted = extract_data(text)
-
-    prompt = build_prompt(text, extracted)
-
-    raw_output = generate_insights(prompt)
-
-    final_output = clean_output(raw_output)
-
-    return final_output
-
+    return "\n\n".join(insights[:4])
 # -----------------------------
 # UI
 # -----------------------------
-st.set_page_config(page_title="AI Insight Generator", layout="wide")
+st.set_page_config(page_title="AI Smart Summarizer", layout="wide")
 
-st.title("🧠 AI Business Insight Generator")
-st.markdown("Generate **4 smart insights** from text or images")
+st.title("🧠 AI Smart Summarizer")
+st.markdown("Summarize **Text or Image → 4 Bullet Points**")
 
-tab1, tab2 = st.tabs(["📝 Text Input", "🖼️ Image Upload"])
+tab1, tab2 = st.tabs(["📝 Text", "🖼️ Image"])
 
 # -----------------------------
-# TEXT TAB
+# TEXT INPUT
 # -----------------------------
 with tab1:
-    user_text = st.text_area("Enter your data:", height=250)
+    user_text = st.text_area("Enter your text:", height=250)
 
-    if st.button("Generate Insights 🚀"):
+    if st.button("Generate Summary 🚀"):
         if user_text.strip() == "":
             st.warning("Please enter text")
         else:
-            with st.spinner("Analyzing..."):
-                result = get_insights(user_text)
+            with st.spinner("Summarizing..."):
+                result = summarize_text(user_text)
 
-            st.markdown("## 📌 Insights")
-            st.markdown(result)
+            st.subheader("📌 Summary")
+            for line in result.split("\n"):
+                st.write(line)
 
 # -----------------------------
-# IMAGE TAB
+# IMAGE INPUT
 # -----------------------------
 with tab2:
-    uploaded_file = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"])
+    uploaded_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
 
     if uploaded_file:
         image = Image.open(uploaded_file)
         st.image(image, use_column_width=True)
 
-        if st.button("Extract & Analyze 🧠"):
-            with st.spinner("Processing..."):
-                extracted_text = extract_text_from_image(image)
-                result = get_insights(extracted_text)
+        if st.button("Summarize 🧠"):
+            with st.spinner("Extracting text..."): 
+                extracted_text = extract_text_from_image(image) 
+            st.subheader("📄 Extracted Text") 
+            st.write(extracted_text)
+            with st.spinner("Summarizing..."):
+                result = summarize_text(extracted_text)
 
-            st.markdown("## 📌 Insights")
+            st.subheader("📌 Summary")
             st.markdown(result)
