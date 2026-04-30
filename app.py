@@ -71,7 +71,7 @@ def summarize_text(text):
             title = s.split(" ")[0:4]  # first few words as title
             title = " ".join(title)
 
-            insights.append(f"### 💡 Insight {i+1}: {title}\n- {s}")
+            insights.append(f"{s}")
 
     return "\n\n".join(insights[:4])
 # -----------------------------
