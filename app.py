@@ -26,58 +26,59 @@ def extract_text_from_image(image):
     return pytesseract.image_to_string(image)
 
 # -----------------------------
-# Step 1: Extract Data
+# Clean OCR Text
+# -----------------------------
+def clean_ocr_text(text):
+    text = re.sub(r'[^A-Za-z0-9$%., ]+', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+# -----------------------------
+# Extract Data
 # -----------------------------
 def extract_data(text):
     numbers = re.findall(r'\$?\d+(?:\.\d+)?%?', text)
 
-    keywords = {
-        "revenue": bool(re.search(r"revenue|sales", text, re.I)),
-        "profit": bool(re.search(r"profit|income", text, re.I)),
-        "expense": bool(re.search(r"expense|cost", text, re.I))
-    }
-
     return {
-        "numbers": numbers,
-        "keywords": keywords
+        "numbers": numbers
     }
 
 # -----------------------------
-# Step 2: Build Prompt
+# Build Prompt
 # -----------------------------
 def build_prompt(text, extracted):
 
     return f"""
-You are a business analyst.
+You are a financial analyst.
 
-Generate EXACTLY 4 high-quality insights.
+Generate EXACTLY 4 meaningful business insights.
 
-Each insight must:
-- Be analytical (not descriptive)
+Each insight should:
+- Have a short title
+- Provide a clear explanation
 - Use numbers if available: {extracted['numbers']}
 - Avoid repetition
-- Sound professional
 
-Format EXACTLY like:
+Format:
 
-### 💡 Insight 1: <Short Title>
-- <Explanation>
+Insight 1: Title
+- Explanation
 
-### 📊 Insight 2: <Short Title>
-- <Explanation>
+Insight 2: Title
+- Explanation
 
-### 💸 Insight 3: <Short Title>
-- <Explanation>
+Insight 3: Title
+- Explanation
 
-### 🔍 Insight 4: <Short Title>
-- <Explanation>
+Insight 4: Title
+- Explanation
 
 Data:
 {text}
 """
 
 # -----------------------------
-# Step 3: Generate Insights
+# Generate Insights
 # -----------------------------
 def generate_insights(prompt):
 
@@ -85,35 +86,37 @@ def generate_insights(prompt):
 
     outputs = model.generate(
         **inputs,
-        max_new_tokens=400,
+        max_new_tokens=300,
         temperature=0.7
     )
 
     return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
 # -----------------------------
-# Step 4: Clean Output
+# Clean Output
 # -----------------------------
 def clean_output(text):
 
-    lines = text.split("\n")
+    insights = re.findall(r'Insight \d+:.*?(?=Insight \d+:|$)', text, re.S)
 
     cleaned = []
     seen = set()
 
-    for line in lines:
-        line = line.strip()
+    for ins in insights:
+        ins = ins.strip()
 
-        if len(line) > 10 and line not in seen:
-            cleaned.append(line)
-            seen.add(line)
+        if ins and ins not in seen:
+            cleaned.append(ins)
+            seen.add(ins)
 
-    return "\n".join(cleaned)
+    return "\n\n".join(cleaned[:4])
 
 # -----------------------------
 # Main Pipeline
 # -----------------------------
 def get_insights(text):
+
+    text = clean_ocr_text(text)
 
     extracted = extract_data(text)
 
@@ -131,7 +134,7 @@ def get_insights(text):
 st.set_page_config(page_title="AI Insight Generator", layout="wide")
 
 st.title("🧠 AI Business Insight Generator")
-st.markdown("Generate **4 powerful insights** from Text or Image")
+st.markdown("Generate **4 smart insights** from text or images")
 
 tab1, tab2 = st.tabs(["📝 Text Input", "🖼️ Image Upload"])
 
@@ -162,13 +165,8 @@ with tab2:
         st.image(image, use_column_width=True)
 
         if st.button("Extract & Analyze 🧠"):
-            with st.spinner("Extracting text..."):
+            with st.spinner("Processing..."):
                 extracted_text = extract_text_from_image(image)
-
-            st.subheader("📄 Extracted Text")
-            st.write(extracted_text)
-
-            with st.spinner("Generating insights..."):
                 result = get_insights(extracted_text)
 
             st.markdown("## 📌 Insights")
