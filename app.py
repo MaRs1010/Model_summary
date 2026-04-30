@@ -111,13 +111,7 @@ with tab2:
         image = Image.open(uploaded_file)
         st.image(image, use_column_width=True)
 
-        if st.button("Extract & Summarize 🧠"):
-            with st.spinner("Extracting text..."):
-                extracted_text = extract_text_from_image(image)
-
-            st.subheader("📄 Extracted Text")
-            st.write(extracted_text)
-
+        if st.button("Summarize 🧠"):
             with st.spinner("Summarizing..."):
                 result = summarize_text(extracted_text)
 
