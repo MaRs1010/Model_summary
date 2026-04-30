@@ -112,6 +112,10 @@ with tab2:
         st.image(image, use_column_width=True)
 
         if st.button("Summarize 🧠"):
+            with st.spinner("Extracting text..."): 
+                extracted_text = extract_text_from_image(image) 
+            st.subheader("📄 Extracted Text") 
+            st.write(extracted_text)
             with st.spinner("Summarizing..."):
                 result = summarize_text(extracted_text)
 
